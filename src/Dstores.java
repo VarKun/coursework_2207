@@ -2,11 +2,14 @@ import java.io.*;
 import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.logging.Logger;
 
 public class Dstores {
 	private static File folderDir;
-	private static  String fileFolder;
+	private static String fileFolder;
 	private static final Logger logger = Logger.getLogger(Controller.class.getName());
 
 
@@ -38,7 +41,7 @@ public class Dstores {
 
 
 		try (ServerSocket serverSocket = new ServerSocket(port);
-		     Socket controllerSocket = new Socket(InetAddress.getLoopbackAddress(),cport);
+		     Socket controllerSocket = new Socket(InetAddress.getLoopbackAddress(), cport);
 		     PrintWriter controllerPrintWriter = new PrintWriter(controllerSocket.getOutputStream(), true);) {
 
 
@@ -59,24 +62,33 @@ public class Dstores {
 		}
 	}
 
-	private static void handleController(Socket client, PrintWriter controllerOut, int timeout){
-		while(true){
+	private static void handleController(Socket client, PrintWriter controllerOut, int timeout) {
+		while (true) {
 			try {
 				BufferedReader bufferedReader = new BufferedReader(new InputStreamReader(client.getInputStream()));
-				PrintWriter out = new PrintWriter(client.getOutputStream(),true);
+				PrintWriter out = new PrintWriter(client.getOutputStream(), true);
 				String line;
-				while((line = bufferedReader.readLine()) != null){
+				while ((line = bufferedReader.readLine()) != null) {
 					String[] command = line.split(" ");
-					switch (command[0]){
+					switch (command[0]) {
 						case Protocol.STORE_TOKEN -> {
-							String fileName = command[1];
+							String filename = command[1];
 							int fileSize = Integer.parseInt(command[2]);
-							if(fileName != null){
-								logger.info("Received fileName:"+ fileName);
+							if (filename != null) {
+								logger.info("Received fileName:" + filename);
 								out.println(Protocol.ACK_TOKEN);
 							}
-							boolean success = receiveFileContent(fileName,fileSize, client);
-							if(success) controllerOut.println(Protocol.STORE_ACK_TOKEN + fileName);
+							boolean success = receiveFileContent(filename, fileSize, client);
+							if (success) controllerOut.println(Protocol.STORE_ACK_TOKEN +" " + filename);
+						}
+						case Protocol.LOAD_DATA_TOKEN -> {
+							String filename = command[1];
+							handleLoad(filename, client);
+
+						}
+						case Protocol.REMOVE_TOKEN -> {
+							String filename = command[1];
+							handleRemove(filename,controllerOut);
 						}
 					}
 
@@ -110,4 +122,40 @@ public class Dstores {
 		return true;
 	}
 
+	private static synchronized void handleLoad(String filename, Socket client) {
+		sendFileContent(filename, client);
+	}
+
+	private static synchronized void sendFileContent(String filename, Socket client) {
+		File fileSend = new File(fileFolder, filename);
+		try (FileInputStream fileInputStream = new FileInputStream(fileSend)) {
+			OutputStream outputStream = client.getOutputStream();
+			byte[] buffer = new byte[1024];
+			int bytesRead;
+			while ((bytesRead = fileInputStream.read(buffer)) != -1) {
+				logger.info("Writting contents: " + buffer);
+				outputStream.write(buffer, 0, bytesRead);
+			}
+			outputStream.flush();
+		} catch (IOException e) {
+			throw new RuntimeException(e);
+		}
+	}
+
+	private static void handleRemove(String filename,PrintWriter controllerOut) {
+		Path path = Paths.get(fileFolder,filename);
+		if(path.toFile().exists()) {
+			try {
+				Files.delete(path);
+				controllerOut.println(Protocol.REMOVE_ACK_TOKEN + " " + filename);
+				logger.info("Removed file: " + filename);
+			} catch (IOException e) {
+				throw new RuntimeException(e);
+			}
+		}else {
+			controllerOut.println(Protocol.ERROR_FILE_DOES_NOT_EXIST_TOKEN + " " + filename);
+			logger.warning("File does not exist: " + filename);
+		}
+	}
 }
+
