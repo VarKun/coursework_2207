@@ -29,15 +29,12 @@ public class Controller {
 	// Declare this map as a class member
 	private Map<String, Future<?>> removeAcksFutures;
 
-
-
 	// Map fileName into list of Dstore
 	private static Map<String, List<Integer>> fileToDstoreMap;
 
 	private ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(2);
 
 	private static final Logger logger = Logger.getLogger(Controller.class.getName());
-
 
 	/**
 	 * constructor
