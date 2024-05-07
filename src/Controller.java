@@ -28,6 +28,10 @@ public class Controller {
 	private static Map<Socket, Integer> lastUsedPortByClient;
 	// Declare this map as a class member
 	private Map<String, Future<?>> removeAcksFutures;
+	private CountDownLatch countDownLatch;
+	private Map<String, CountDownLatch> latchMap;
+	private ScheduledExecutorService scheduledExecutorService = Executors.newScheduledThreadPool(1);  //
+
 
 	// Map fileName into list of Dstore
 	private static Map<String, List<Integer>> fileToDstoreMap;
@@ -40,7 +44,7 @@ public class Controller {
 	 * constructor
 	 */
 	public Controller() {
-		index = new IndexToStatecontroller(new ConcurrentHashMap<>());
+		index = new IndexToStatecontroller();
 		initialize();
 
 	}
@@ -52,9 +56,11 @@ public class Controller {
 		fileToDstoreMap = new ConcurrentHashMap<>();
 		filenameSizeMap = new ConcurrentHashMap<>();
 		receiveAck = new ConcurrentHashMap<>();
-		storedFileDstore = new ArrayList<>();
+		storedFileDstore = new CopyOnWriteArrayList<>();
 		lastUsedPortByClient = new ConcurrentHashMap<>();
 		removeAcksFutures = new ConcurrentHashMap<>();
+		latchMap = new ConcurrentHashMap<>();
+
 		logger.info("Initialize");
 
 	}
@@ -94,22 +100,27 @@ public class Controller {
 		try {
 			PrintWriter out = new PrintWriter(client.getOutputStream(), true);
 			bufferedReader = new BufferedReader(new InputStreamReader(client.getInputStream()));
-			var line = bufferedReader.readLine();
-
-			while (line != null) {
+			String line;
+			while ((line = bufferedReader.readLine())!= null) {
 				var command = line.split(" ");
 				switch (command[0]) {
 					case Protocol.JOIN_TOKEN -> {
+						logger.info("the replicated number is :  " + replicationNumber);
+						dataStorePort = Integer.parseInt(command[1]);
+						if (dataStoreSockets.containsKey(dataStorePort)) {
+							logger.warning("Attempted to add an already existing DataStore on port: " + dataStorePort);
+							return;
+						}
+
 						DstoreConnection = true;
 						logger.info("DataStore Join " + DstoreConnection);
-						dataStorePort = Integer.parseInt(command[1]);
 						addDstore(dataStorePort, client);
 						handleBalance();
 					}
 					case Protocol.STORE_TOKEN -> {
 						if (checkDstoreEnough(client, out)) {
+							handleStore(command[1], command[2], replicationNumber, out);
 
-							handleStore(dataStorePort, command[1], command[2], replicationNumber, out);
 						}
 					}
 					case Protocol.STORE_ACK_TOKEN -> {
@@ -135,7 +146,7 @@ public class Controller {
 						handleRemoveAck(command[1],out );
 					}
 					case Protocol.LIST_TOKEN -> {
-						if (DstoreConnection && dataStorePort != 0 && checkDstoreEnough(client,out)) {
+						if (checkDstoreEnough(client,out)) {
 							handleList(dataStorePort, command, out);
 						} else {
 
@@ -165,19 +176,20 @@ public class Controller {
 	}
 
 
-	private synchronized void handleStore(int port, String filename,String fileSize, int replicationNumber, PrintWriter out) {
-		logger.info(" It is handling storage, port : " + port);
-		if (!IndexToStatecontroller.dstoreStatusMap.containsKey(filename)) {
-			IndexToStatecontroller.dstoreStatusMap.put(filename, IndexToStatecontroller.IS_STORING);
+	private synchronized void handleStore( String filename,String fileSize, int replicationNumber, PrintWriter out) {
+		logger.info(" It is handling storage  : " + filename);
+		if (!index.existsDstoreStatus(filename)) {
+			index.setDstoreStatus(filename, IndexToStatecontroller.IS_STORING);
 			filenameSizeMap.put(fileSize, Integer.parseInt(fileSize));
 			sendStoreCommandToClient(out, replicationNumber,filename);
+
 		} else {
 			out.println(Protocol.ERROR_FILE_ALREADY_EXISTS_TOKEN);
 		}
 
 	}
 	private synchronized void handleLoad(String filename, PrintWriter out, int replicationNumber,Socket client) throws IOException {
-		if(IndexToStatecontroller.dstoreStatusMap.containsKey(filename)) {
+		if(index.existsDstoreStatus(filename)) {
 			Random random = new Random();
 			int candidatePort = storedFileDstore.get(random.nextInt(storedFileDstore.size()));
 			int fileSize = filenameSizeMap.get(filename);
@@ -199,7 +211,7 @@ public class Controller {
 
 
 	private synchronized void handleReload(String filename, PrintWriter out, int replicationNumber,boolean reload,Socket client){
-		if(IndexToStatecontroller.dstoreStatusMap.containsKey(filename)) {
+		if(index.existsDstoreStatus(filename)) {
 			int port = -1;
 			Integer lastUsedPort = lastUsedPortByClient.getOrDefault(client,-1);
 			Random random = new Random();
@@ -231,13 +243,13 @@ public class Controller {
 	}
 
 	private synchronized void handleRemove(String filename, PrintWriter out, int timeout) {
-		if(!IndexToStatecontroller.dstoreStatusMap.containsKey(filename)){
+		if(!index.existsDstoreStatus(filename)){
 			out.println(Protocol.ERROR_FILE_DOES_NOT_EXIST_TOKEN);
 			logger.info("File does not exist in the index, filename : " + filename);
 			return;
 		}
 
-		IndexToStatecontroller.dstoreStatusMap.put(filename, IndexToStatecontroller.IS_REMOVING);
+		index.setDstoreStatus(filename, IndexToStatecontroller.IS_REMOVING);
 		logger.info("Is removing " + filename);
 
 
@@ -264,24 +276,22 @@ public class Controller {
 	}
 
 	private synchronized void handleList(int port, String[] command, PrintWriter out) {
-//		rebalance++;
-		List<String> fileNames = new ArrayList<>(filenameSizeMap.keySet());
-		if (fileNames.size() == 0) {
-			out.println(Protocol.LIST_TOKEN );
-		}else {
+		List<String> fileNames = new CopyOnWriteArrayList<>(filenameSizeMap.keySet());
+		if (fileNames.isEmpty()) {
+			out.println(Protocol.LIST_TOKEN);
+			logger.info("No files to list");
+		} else {
 			StringBuilder stringBuilder = new StringBuilder();
-			for(String filename: fileNames){
-				if(index.getDstoreStatus(filename) == IndexToStatecontroller.STORE_COMPLETE){
+			for (String filename : fileNames) {
+				if (index.getDstoreStatus(filename) == IndexToStatecontroller.STORE_COMPLETE) {
 					stringBuilder.append(" ").append(filename);
 				}
 			}
 			String filenames = stringBuilder.toString();
-			out.println(Protocol.LIST_TOKEN + filenames );
+			out.println(Protocol.LIST_TOKEN + filenames);
 		}
-
-//		updateFileToDStore(port, fileNames);
-
 	}
+
 
 //	private synchronized void updateFileToDStore(int port, List<String> filenames) {
 //		if (!fileToDstoreMap.isEmpty()) {
@@ -299,8 +309,12 @@ public class Controller {
 	}
 
 	private synchronized void addDstore(int port, Socket client) {
-		dataStoreSockets.put(port, client);
-		logger.info("Added dataStore, port, client:" + port + "," + client);
+		if (!dataStoreSockets.containsKey(port)) {
+			dataStoreSockets.put(port, client);
+			logger.info("Added dataStore, port, client:" + port + "," + client);
+		} else {
+			logger.warning("Attempted to add an existing DataStore on port: " + port);
+		}
 	}
 
 	private synchronized boolean checkDstoreEnough(Socket client, PrintWriter out) {
@@ -330,35 +344,41 @@ public class Controller {
 		String dstores = stringBuilder.toString();
 		out.println(Protocol.STORE_TO_TOKEN + dstores);
 		fileToDstoreMap.put(filename,storedFileDstore);
+		countDownLatch = new CountDownLatch(replicationNumber);
+		latchMap.put(filename, countDownLatch);
 	}
 
-	private synchronized void handleDstoreAcks(String filename, PrintWriter out, int timeout) {
-		if (receiveAck.containsKey(filename)) {
-			int countAck = receiveAck.get(filename);
-			receiveAck.put(filename, countAck + 1);
-		} else {
-			receiveAck.put(filename, 1);
+	private void handleDstoreAcks(String filename, PrintWriter out, int timeout) {
+		CountDownLatch cLatch = latchMap.get(filename);
+		cLatch.countDown();
+
+		if (cLatch.getCount() == 0) {
+			checkEnoughAck(filename, out, timeout);
 		}
+	}
 
-		checkEnoughAck(filename, out);
+	private void checkEnoughAck(String filename, PrintWriter out, int timeout) {
+		scheduledExecutorService.schedule(() -> {
+			boolean allACKReceived = false;
+			try {
 
-		Runnable timeoutTask = () -> {
-			if (receiveAck.getOrDefault(filename, 0) < replicationNumber) {
-				IndexToStatecontroller.dstoreStatusMap.remove(filename);
+				allACKReceived = latchMap.get(filename).await(timeout, TimeUnit.MILLISECONDS);
+			} catch (InterruptedException e) {
+				Thread.currentThread().interrupt();
+				logger.warning("Thread interrupted while waiting for ACKs.");
 			}
-		};
 
-		scheduler.schedule(timeoutTask, timeout, TimeUnit.MILLISECONDS);
+			if (allACKReceived) {
+				index.setDstoreStatus(filename, IndexToStatecontroller.STORE_COMPLETE);
+				out.println(Protocol.STORE_COMPLETE_TOKEN);
+				logger.info("Enough Store ACKs received for " + filename);
+			} else {
+				index.removeDstoreStatus(filename);
+				logger.warning("Not all ACKs received within the timeout for " + filename);
+			}
+		}, timeout, TimeUnit.MILLISECONDS);
 	}
 
-	private synchronized void checkEnoughAck(String filename, PrintWriter out) {
-
-		if (receiveAck.get(filename) >= replicationNumber) {
-					IndexToStatecontroller.dstoreStatusMap.put(filename, IndexToStatecontroller.STORE_COMPLETE);
-					out.println(Protocol.STORE_COMPLETE_TOKEN);
-					logger.info("Enough Store ACKs received");
-				}
-	}
 
 
 
@@ -394,7 +414,7 @@ public class Controller {
 			if (timeoutFuture != null) {
 				timeoutFuture.cancel(false);
 			}
-			IndexToStatecontroller.dstoreStatusMap.remove(filename);
+			index.removeDstoreStatus(filename);
 			out.println(Protocol.REMOVE_COMPLETE_TOKEN);
 			filenameSizeMap.remove(filename);
 			logger.info("All REMOVE_ACKs received for file: " + filename);

@@ -48,13 +48,13 @@ public class Dstores {
 			logger.info("Data Store setup on port " + port);
 			controllerPrintWriter.println(String.format("%s %d", Protocol.JOIN_TOKEN, port));
 			System.out.println("Data Store setup on port " + port);
-			controllerPrintWriter.println("JOIN " + port);
+
 
 			while (true) {
 				Socket client = serverSocket.accept();
 
 				new Thread(() -> {
-					handleController(client, controllerPrintWriter, timeout);
+					handleClient(client, controllerPrintWriter, timeout);
 				}).start();
 			}
 		} catch (Exception e) {
@@ -62,7 +62,7 @@ public class Dstores {
 		}
 	}
 
-	private static void handleController(Socket client, PrintWriter controllerOut, int timeout) {
+	private static void handleClient(Socket client, PrintWriter controllerOut, int timeout) {
 		while (true) {
 			try {
 				BufferedReader bufferedReader = new BufferedReader(new InputStreamReader(client.getInputStream()));
@@ -79,7 +79,9 @@ public class Dstores {
 								out.println(Protocol.ACK_TOKEN);
 							}
 							boolean success = receiveFileContent(filename, fileSize, client);
+							logger.info("Received file content:" + success);
 							if (success) controllerOut.println(Protocol.STORE_ACK_TOKEN +" " + filename);
+							logger.info("sent ACK to the controller");
 						}
 						case Protocol.LOAD_DATA_TOKEN -> {
 							String filename = command[1];
@@ -94,32 +96,33 @@ public class Dstores {
 
 				}
 			} catch (IOException e) {
+				logger.warning("IO exception in handleClient: " + e.getMessage());
 				throw new RuntimeException(e);
 			}
 		}
 
-
 	}
 
 	private static boolean receiveFileContent(String fileName, int fileSize, Socket client) {
-		try {
-			FileOutputStream fileOutputStream = new FileOutputStream(new File(fileFolder, fileName));
-			try (InputStream inputStream = client.getInputStream()) {
-				byte[] buffer = new byte[1024];
-				int bytesRead;
-				int remainingBytes = fileSize;
-				while (remainingBytes > 0 && (bytesRead = inputStream.read(buffer, 0, Math.min(buffer.length, remainingBytes))) != -1) {
-					fileOutputStream.write(buffer, 0, bytesRead);
-					remainingBytes -= bytesRead;
-				}
-
-			} finally {
-				fileOutputStream.close();
+		File outputFile = new File(fileFolder, fileName);
+		try (FileOutputStream fileOutputStream = new FileOutputStream(outputFile);
+		     InputStream inputStream = client.getInputStream()) {
+			logger.info("Starting file reception: " + inputStream);
+			byte[] buffer = new byte[1024];
+			int bytesRead;
+			int remainingBytes = fileSize;
+			while (remainingBytes > 0 && (bytesRead = inputStream.read(buffer, 0, Math.min(buffer.length, remainingBytes))) != -1) {
+				fileOutputStream.write(buffer, 0, bytesRead);
+				remainingBytes -= bytesRead;
 			}
+			if (remainingBytes == 0) {
+				logger.info("File reception complete for " + fileName);
+				return true;
+			}
+			return false;
 		} catch (IOException e) {
-			throw new RuntimeException(e);
+			return false;
 		}
-		return true;
 	}
 
 	private static synchronized void handleLoad(String filename, Socket client) {
