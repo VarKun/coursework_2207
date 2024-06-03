@@ -20,16 +20,16 @@ public class ClientMain {
 			if (!uploadFolder.mkdir()) throw new RuntimeException("Cannot create 'to_store' folder (folder absolute path: " + uploadFolder.getAbsolutePath() + ")");
 		
 		// launch a single client
-		testClient(cport, timeout, downloadFolder, uploadFolder);
+//		testClient(cport, timeout, downloadFolder, uploadFolder);
 		
 		// launch a number of concurrent clients, each doing the same operations
-//		for (int i = 0; i < 10; i++) {
-//			new Thread() {
-//				public void run() {
-//					test2Client(cport, timeout, downloadFolder, uploadFolder);
-//				}
-//			}.start();
-//		}
+		for (int i = 0; i < 10; i++) {
+			new Thread() {
+				public void run() {
+					test2Client(cport, timeout, downloadFolder, uploadFolder);
+				}
+			}.start();
+		}
 	}
 	
 	public static void test2Client(int cport, int timeout, File downloadFolder, File uploadFolder) {
