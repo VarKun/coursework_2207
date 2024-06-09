@@ -69,11 +69,11 @@ public class Dstore {
 				String[] command = line.split(" ");
 				switch (command[0]) {
 					case Protocol.STORE_TOKEN -> {
+
 						String filename = command[1];
 						int fileSize = Integer.parseInt(command[2]);
-						sendAck(out);
 						client.setSoTimeout(timeout);  // Set timeout for reading data
-						receiveFileContent(filename, fileSize, client, controllerOut);
+						receiveFileContent(filename, fileSize, client, controllerOut,out);
 					}
 					case Protocol.LOAD_DATA_TOKEN -> {
 						String filename = command[1];
@@ -113,14 +113,13 @@ public class Dstore {
 		}
 	}
 
-	private static synchronized void sendAck(PrintWriter out) {
-		out.println(Protocol.ACK_TOKEN);
-	}
 
-	private static synchronized void receiveFileContent(String fileName, int fileSize, Socket client, PrintWriter controllerOut) {
-		try  {
+	private static synchronized void receiveFileContent(String fileName, int fileSize, Socket client, PrintWriter controllerOut,PrintWriter out) {
+		out.println(Protocol.ACK_TOKEN);
+		InputStream inputStream = null;
+		try {
 			byte[] data = new byte[fileSize];
-			var inputStream = client.getInputStream();
+			inputStream = client.getInputStream();
 			inputStream.readNBytes(data, 0, fileSize);
 			Path filePath = Paths.get(fileFolder, fileName);
 			Files.createDirectories(filePath.getParent());
@@ -129,19 +128,36 @@ public class Dstore {
 			controllerOut.println(Protocol.STORE_ACK_TOKEN + " " + fileName);
 			logger.info("Send ACK to Controller: " + fileName);
 
-
 		} catch (IOException e) {
 			logger.warning("Error receiving file content: " + e.getMessage());
+		} finally {
+//			try {
+//				inputStream.close();
+//			} catch (Exception e) {
+//				logger.warning("Error receiving file content Dstore: " + e.getMessage());
+//			}
 		}
 	}
 
 	private static synchronized void handleLoad(String fileName, OutputStream out) {
+		FileOutputStream fileOutputStream = null;
 		try {
 			Path path = Paths.get(fileFolder, fileName);
+//			fileOutputStream = new FileOutputStream(path.toFile());
 			byte[] data = Files.readAllBytes(path);
 			out.write(data);
+//			fileOutputStream.write(data);
+//			fileOutputStream.flush();
 		} catch (IOException e) {
 			logger.warning("Error loading file: " + e.getMessage());
+		} finally {
+			if (fileOutputStream != null) {
+				try {
+					fileOutputStream.close();
+				} catch (Exception e) {
+					logger.warning("Error loading file22222: " + e.getMessage());
+				}
+			}
 		}
 	}
 
