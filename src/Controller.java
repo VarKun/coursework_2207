@@ -292,12 +292,12 @@ public class Controller {
             removeLock.readLock().unlock();
         }
 
-        // 发送删除命令给所有相关的DataStore
+
         for (Integer port : ports) {
             sendRemove(port, filename);
         }
 
-        // 设置超时处理
+
         scheduler.schedule(() -> {
 
             if (latchRemoveMap.containsKey(filename) && latchRemoveMap.get(filename).containsKey(out) && latchRemoveMap.get(filename).equals(out) && latchRemoveMap.get(filename).get(out) > 0) {
