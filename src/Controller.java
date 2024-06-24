@@ -31,6 +31,8 @@ public class Controller {
     private final ReadWriteLock removeLock = new ReentrantReadWriteLock();
     private final ReadWriteLock storeLock = new ReentrantReadWriteLock();
     private final ReadWriteLock listLock = new ReentrantReadWriteLock();
+	ArrayList a = new ArrayList();
+
 
 
     private static void configureLogger() {
