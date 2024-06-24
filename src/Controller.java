@@ -22,15 +22,15 @@ public class Controller {
 	private static ConcurrentMap<String, PrintWriter> fileRemoveClient;
 	private static ConcurrentMap<String, Integer> filenameSizeMap;
 	private static ConcurrentMap<Socket, Set<Integer>> lastUsedPortByClient;
-    private static ConcurrentMap<String, ConcurrentMap<PrintWriter, Integer>> latchMap;
+    	private static ConcurrentMap<String, ConcurrentMap<PrintWriter, Integer>> latchMap;
 	private static ConcurrentMap<String, ConcurrentMap<PrintWriter, Integer>> latchRemoveMap;
 	private static ConcurrentMap<String, List<Integer>> fileToDstoreMap;
 	private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(2);
 	private static final Logger logger = Logger.getLogger(Controller.class.getName());
 	private static ConcurrentMap<Socket, Integer> loadCount;
-    private final ReadWriteLock removeLock = new ReentrantReadWriteLock();
-    private final ReadWriteLock storeLock = new ReentrantReadWriteLock();
-    private final ReadWriteLock listLock = new ReentrantReadWriteLock();
+    	private final ReadWriteLock removeLock = new ReentrantReadWriteLock();
+    	private final ReadWriteLock storeLock = new ReentrantReadWriteLock();
+    	private final ReadWriteLock listLock = new ReentrantReadWriteLock();
 	ArrayList a = new ArrayList();
 
 
