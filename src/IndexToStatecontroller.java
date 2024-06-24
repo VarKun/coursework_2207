@@ -8,6 +8,8 @@ public class IndexToStatecontroller {
 	public final static String IS_STORING = "Is_Storing";
 	public final static String STORE_COMPLETE = "Store_complete";
 	public final static String IS_REMOVING = "Is_Removing";
+
+	//no use
 	public final static String REMOVED = "Removed";
 
 	public static Map<String, String> dstoreStatusMap;

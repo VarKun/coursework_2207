@@ -19,12 +19,14 @@ public class Protocol {
 	public final static String ERROR_FILE_ALREADY_EXISTS_TOKEN = "ERROR_FILE_ALREADY_EXISTS";
 	public final static String ERROR_NOT_ENOUGH_DSTORES_TOKEN = "ERROR_NOT_ENOUGH_DSTORES";
 	public final static String ERROR_LOAD_TOKEN = "ERROR_LOAD";
-	
+
 	// messages sent by Dstore
 	public final static String ACK_TOKEN = "ACK";
 	public final static String STORE_ACK_TOKEN = "STORE_ACK";
 	public final static String REMOVE_ACK_TOKEN = "REMOVE_ACK";
 	public final static String JOIN_TOKEN = "JOIN";
+
+	// no use
 	public final static String REBALANCE_STORE_TOKEN = "REBALANCE_STORE";
 	public final static String REBALANCE_COMPLETE_TOKEN = "REBALANCE_COMPLETE";
 }

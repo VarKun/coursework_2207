@@ -34,7 +34,6 @@ public class Controller {
 	ArrayList a = new ArrayList();
 
 
-
     private static void configureLogger() {
         logger.setLevel(Level.ALL);
         logger.setUseParentHandlers(false);
